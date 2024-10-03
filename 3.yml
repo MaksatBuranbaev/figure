@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp-deployment
+spec:
+  replicas: 3  # Мне нужно 3 пода, чтобы справляться с постоянной нагрузкой
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      containers:
+      - name: webapp-container
+        image: webapp-image:latest  # Я указываю образ приложения
+        resources:
+          requests:
+            memory: "128Mi"  # Приложение стабильно потребляет 128MB памяти
+            cpu: "100m"      # После инициализации CPU потребление 0.1
+          limits:
+            memory: "128Mi"  # Память стабильно ограничиваю на 128MB
+            cpu: "500m"      # Ограничиваю CPU до 500m для пиков на старте
+        readinessProbe:      # Чтобы под принимал запросы только после инициализации
+          httpGet:
+            path: /healthz   # Приложение будет проверяться по этому пути
+            port: 8080
+          initialDelaySeconds: 10  # Жду 10 секунд перед первой проверкой
+        ports:
+        - containerPort: 8080  # Приложение слушает на 8080 порту
+
+      affinity:  # Я хочу, чтобы поды размещались на разных нодах для отказоустойчивости
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - webapp
+              topologyKey: "kubernetes.io/hostname"  # Разношу поды по разным нодам
+
+  strategy:
+    type: RollingUpdate  # Обновляю поды постепенно, чтобы не прерывать работу приложения
+    rollingUpdate:
+      maxSurge: 1  # Позволяю запускать максимум один дополнительный под при обновлении
+      maxUnavailable: 0  # Все поды должны быть в рабочем состоянии во время обновления
